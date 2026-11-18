@@ -12,6 +12,7 @@
     optsByGame: {},
     state: null,
     history: [],
+    future: [],   // für Wiederholen (Strg+Umschalt+Z)
     ui: { typed: '', dbuf: '', mult: 1, sel: null },
     padHidden: false,
   };
@@ -107,6 +108,7 @@
     const players = App.names.slice(0, App.playerCount).map((n, i) => (n || '').trim() || 'Spieler ' + (i + 1));
     App.state = g.create(players, { ...App.optsByGame[App.gameId] });
     App.history = [];
+    App.future = [];
     resetUi();
     App.screen = 'game';
     render();
@@ -118,6 +120,7 @@
     commit(fn) {
       App.history.push(JSON.stringify(App.state));
       if (App.history.length > 500) App.history.shift();
+      App.future = []; // neue Eingabe verwirft den Wiederholen-Stapel (wie in Office)
       fn(App.state);
       resetUi();
       if (App.state.finished) { App.screen = 'result'; }
@@ -130,9 +133,20 @@
   function undo() {
     if (App.ui.typed || App.ui.dbuf || App.ui.mult !== 1 || App.ui.sel) { resetUi(); render(); return; }
     if (!App.history.length) { DG.toast('Nichts zum Rückgängigmachen'); return; }
+    App.future.push(JSON.stringify(App.state));
     App.state = JSON.parse(App.history.pop());
     resetUi();
     if (App.screen === 'result') App.screen = 'game';
+    render();
+  }
+
+  /** Rückgängig gemachten Schritt wiederherstellen (Strg+Umschalt+Z / Strg+Y) */
+  function redo() {
+    if (!App.future.length) { DG.toast('Nichts zum Wiederholen'); return; }
+    App.history.push(JSON.stringify(App.state));
+    App.state = JSON.parse(App.future.pop());
+    resetUi();
+    App.screen = App.state.finished ? 'result' : 'game';
     render();
   }
 
@@ -162,7 +176,8 @@
     });
     return [topbar([
         h('button', { class: 'pillbtn', onclick: leaveGame }, '⇦ Menü', h('span', { class: 'kbd' }, 'Esc')),
-        h('button', { class: 'pillbtn', onclick: undo }, '↶ Zurück', h('span', { class: 'kbd' }, 'X')),
+        h('button', { class: 'pillbtn', onclick: undo, title: 'Rückgängig (Strg+Z oder X)' }, '↶ Zurück', h('span', { class: 'kbd' }, 'Strg+Z')),
+        h('button', { class: 'pillbtn', onclick: redo, disabled: !App.future.length, style: App.future.length ? '' : 'opacity:.4', title: 'Wiederholen (Strg+Umschalt+Z oder Strg+Y)' }, '↷ Vor', h('span', { class: 'kbd' }, 'Strg+⇧+Z')),
         modeBtn]),
       body];
   }
@@ -192,7 +207,7 @@
               h('thead', null, h('tr', null, h('th', null, ''), r.cols.map(c => h('th', null, c)))),
               h('tbody', null, r.rows.map(row => h('tr', null, row.map(c => h('td', null, c))))))))),
       h('div', { class: 'bottombar' },
-        h('button', { class: 'bigbtn secondary', onclick: undo }, 'Letzten Wurf zurück', h('span', { class: 'kbd' }, 'X')),
+        h('button', { class: 'bigbtn secondary', onclick: undo }, 'Letzten Wurf zurück', h('span', { class: 'kbd' }, 'Strg+Z')),
         h('button', { class: 'bigbtn secondary', onclick: goHome }, 'Menü', h('span', { class: 'kbd' }, 'Esc')),
         h('button', { class: 'bigbtn', onclick: () => openSetup(App.gameId) }, 'Neues Spiel', h('span', { class: 'kbd' }, 'N')),
         h('button', { class: 'bigbtn', onclick: startGame }, 'Revanche', h('span', { class: 'kbd' }, 'Enter')))];
@@ -243,6 +258,12 @@
       else if (!inInput && /^[1-8]$/.test(e.key)) { App.playerCount = Math.max(+e.key, DG.games[App.gameId].minPlayers || 1); render(); }
       return;
     }
+    // Rückgängig / Wiederholen wie in Office: Strg+Z, Strg+Umschalt+Z (zusätzlich Strg+Y)
+    if ((App.screen === 'game' || App.screen === 'result') && !inInput && (e.ctrlKey || e.metaKey) && !e.altKey) {
+      const kk = e.key.toLowerCase();
+      if (kk === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if (kk === 'y') { e.preventDefault(); redo(); return; }
+    }
     if (App.screen === 'result') {
       if (e.key === 'Escape') { e.preventDefault(); goHome(); }
       else if (e.key === 'Enter') { e.preventDefault(); startGame(); }
@@ -252,6 +273,7 @@
     }
     if (App.screen === 'game') {
       if (inInput) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // andere Kombinationen nicht als Eingabe werten
       const g0 = DG.games[App.gameId];
       if (e.key === 'Escape') { e.preventDefault(); if (!(g0.onEscape && g0.onEscape(App.state, ctx))) leaveGame(); return; }
       const k = e.key.toLowerCase();
