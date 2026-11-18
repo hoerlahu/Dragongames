@@ -99,7 +99,8 @@
   function finishVisit(s, ctx) {
     if (s.finished) return;
     ctx.commit(st => {
-      while (st.visit.length < 3 && !st.finished) applyDart(st, { m: 0, n: 0 });
+      const need = 3 - st.visit.length; // feste Anzahl, da applyDart die Aufnahme beim 3. Dart zurücksetzt
+      for (let i = 0; i < need && !st.finished; i++) applyDart(st, { m: 0, n: 0 });
     });
   }
 

@@ -1,11 +1,28 @@
-/* Dragongames – Checkout-Training (121 / 170 und frei wählbar) */
+/* Dragongames – Checkout-Training (121 / 170 als Leiter, Checkout-Zufall) */
 'use strict';
 (function () {
   const h = DG.h;
 
+  const isRandom = s => s.opts.mode === 'random';
+  /** aktuelles bzw. nächstes Ziel eines Spielers */
+  const targetOf = (s, p) => isRandom(s) ? s.targets[p.tries] : p.target;
+
   function newAttempt(s) {
-    const p = s.players[s.cur];
-    s.att = { target: p.target, rest: p.target, used: 0, visit: [], visits: [] };
+    const t = targetOf(s, s.players[s.cur]);
+    s.att = { target: t, rest: t, used: 0, visit: [], visits: [] };
+  }
+
+  /** zufällige, checkbare Ziele – für alle Spieler dieselben, damit es fair bleibt */
+  function randomTargets(opts) {
+    const [lo, hi] = opts.range.split('-').map(Number);
+    const list = [];
+    let last = null;
+    while (list.length < opts.tries) {
+      const v = lo + Math.floor(Math.random() * (hi - lo + 1));
+      if (v === last || !DG.checkout(v, opts.outMode, 3)) continue;
+      list.push(v); last = v;
+    }
+    return list;
   }
 
   function create(names, opts) {
@@ -14,6 +31,7 @@
       players: names.map(name => ({ name, target: opts.start, tries: 0, ok: 0, hi: 0, coDarts: 0, log: [] })),
       cur: 0, finished: false, winner: null,
     };
+    if (opts.mode === 'random') s.targets = randomTargets(opts);
     newAttempt(s);
     return s;
   }
@@ -29,6 +47,9 @@
       p.ok++; p.coDarts += a.used; p.hi = Math.max(p.hi, a.target);
       DG.toast('✓ ' + a.target + ' gecheckt mit ' + a.used + ' Darts', 'green');
       DG.say('Check');
+    }
+    if (isRandom(s)) { /* Zufallsziele: keine Leiter */ }
+    else if (success) {
       const step = s.opts.dir === 'down' ? -1 : 1;
       p.target = Math.max(2, Math.min(170, p.target + step));
     } else {
@@ -118,14 +139,14 @@
       const active = i === s.cur;
       return h('div', { class: 'togo' + (active ? ' active' : '') + (n > 2 ? ' compact' : '') + (p.tries >= s.opts.tries ? ' done' : '') },
         h('div', { class: 'name' }, p.name),
-        h('div', { class: 'big' }, active ? restShown : p.target),
+        h('div', { class: 'big' }, active ? restShown : (targetOf(s, p) ?? '–')),
         h('div', { class: 'checkout' }, active ? DG.checkoutText(restShown, s.opts.outMode, Math.max(1, inVisit)) : ''),
         h('div', { class: 'sub' }, (active ? 'Ziel ' + a.target + ' · ' : 'nächstes Ziel · ') + 'Versuch ' + Math.min(p.tries + 1, s.opts.tries) + '/' + s.opts.tries + ' · ✓ ' + p.ok));
     })));
 
     const info = h('div', { class: 'info-row' },
       h('div', { class: 'info-pill' }, 'Ziel ' + a.target + ' · noch ' + dartsLeft(s) + ' von ' + s.opts.darts + ' Darts'),
-      h('div', { class: 'info-pill' }, s.title + ' · ' + (s.opts.dir === 'down' ? 'abwärts' : 'aufwärts') + ' · ' + s.opts.outMode + ' out'));
+      h('div', { class: 'info-pill' }, s.title + ' · ' + (isRandom(s) ? 'Bereich ' + s.opts.range.replace('-', '–') : (s.opts.dir === 'down' ? 'abwärts' : 'aufwärts')) + ' · ' + s.opts.outMode + ' out'));
 
     // Protokoll: Zeilen = Versuche
     const rows = [];
@@ -171,7 +192,7 @@
       ['Quote', p => DG.fmt.pct(p.ok, p.tries)],
       ['Höchstes Ziel', p => p.hi || '–'],
       ['Ø Darts/Checkout', p => p.ok ? (p.coDarts / p.ok).toFixed(1) : '–'],
-      ['Nächstes Ziel', p => p.tries >= s.opts.tries ? 'fertig' : p.target],
+      ['Nächstes Ziel', p => p.tries >= s.opts.tries ? 'fertig' : targetOf(s, p)],
     ];
   }
 
@@ -208,4 +229,21 @@
 
   makeGame('co121', '121', 'Checkout-Leiter ab 121', 121, 'up');
   makeGame('co170', '170', 'Checkout-Training ab 170', 170, 'down');
+
+  /* Checkout-Zufall: zufällige Finishes aus einem Bereich, alle Spieler bekommen dieselben Zahlen */
+  DG.register({
+    id: 'corandom', title: 'Checkout-Zufall', sub: 'zufällige Finishes trainieren', icon: '🎲',
+    inputModes: ['total', 'single'], inputModeLabels: { total: 'Aufnahme', single: 'Einzeldarts' },
+    canToggleInput: s => s.att.visit.length === 0,
+    options: [
+      { key: 'range', label: 'Bereich der Checkouts', type: 'pills',
+        choices: [['2-40', '2–40'], ['41-80', '41–80'], ['41-100', '41–100'], ['61-120', '61–120'], ['101-170', '101–170'], ['2-170', '2–170']], def: '41-100' },
+      { key: 'darts', label: 'Darts pro Versuch', type: 'pills', choices: [[3, '3'], [6, '6'], [9, '9']], def: 6 },
+      { key: 'tries', label: 'Versuche pro Spieler', type: 'pills', choices: [[5, '5'], [10, '10'], [15, '15'], [20, '20']], def: 10 },
+      { key: 'outMode', label: 'Out', type: 'pills', choices: [['double', 'double out'], ['master', 'master out'], ['straight', 'straight out']], def: 'double' },
+    ],
+    rulesText: 'Jede Runde wird eine zufällige, checkbare Zahl aus dem Bereich gezogen – alle Spieler bekommen dieselbe. Jeder hat die gewählte Anzahl Darts, um sie auszumachen. Bust beendet nur die Aufnahme. Wer die meisten Checkouts schafft, gewinnt.',
+    create(names, opts) { const s = create(names, { ...opts, mode: 'random' }); s.title = 'Checkout-Zufall'; return s; },
+    render, onKey, results,
+  });
 })();

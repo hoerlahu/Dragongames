@@ -4,6 +4,10 @@
   const h = DG.h;
   const root = document.getElementById('app');
 
+  // Reihenfolge der Kacheln / F-Tasten auf der Startseite (F1, F2, …)
+  const TILE_ORDER = ['x01', 'cricket', 'co121', 'co170', 'atc', 'bobs27', 'corandom', 'jdc', 'rnddouble'];
+  DG.gameOrder.sort((a, b) => (TILE_ORDER.indexOf(a) + 1 || 99) - (TILE_ORDER.indexOf(b) + 1 || 99));
+
   const App = DG.app = {
     screen: 'home',
     gameId: null,
@@ -24,8 +28,8 @@
       h('div', { class: 'logo', html: LOGO + '<span>Dragon<b>games</b></span>' }),
       h('div', { class: 'actions' },
         extra,
-        h('button', { class: 'pillbtn' + (DG.speech.on ? ' on' : ''), title: 'Score-Ansage', onclick: toggleSpeech }, '🔊 Ansage', App.screen === 'game' ? null : h('span', { class: 'kbd' }, 'F7')),
-        h('button', { class: 'pillbtn', title: 'Vollbild', onclick: toggleFullscreen }, '⛶', App.screen === 'game' ? null : h('span', { class: 'kbd' }, 'F8'))));
+        h('button', { class: 'pillbtn' + (DG.speech.on ? ' on' : ''), title: 'Score-Ansage', onclick: toggleSpeech }, '🔊 Ansage'),
+        h('button', { class: 'pillbtn', title: 'Vollbild', onclick: toggleFullscreen }, '⛶')));
   }
   function toggleSpeech() { DG.speech.on = !DG.speech.on; DG.toast('Ansage ' + (DG.speech.on ? 'an' : 'aus')); render(); }
   function toggleFullscreen() {
@@ -241,11 +245,8 @@
   document.addEventListener('keydown', e => {
     if (DG.modalOpen()) return;
     const inInput = e.target.tagName === 'INPUT';
-    // Im Spiel gehören F1–F12 den Schnelleingaben (wie Darthelfer); F7/F8 nur außerhalb
-    if (App.screen !== 'game') {
-      if (e.key === 'F8') { e.preventDefault(); toggleFullscreen(); return; }
-      if (e.key === 'F7') { e.preventDefault(); toggleSpeech(); return; }
-    }
+    // F-Tasten: auf der Startseite Spielauswahl, im Spiel Schnelleingaben (wie Darthelfer).
+    // Ansage und Vollbild daher nur per Klick (Vollbild außerhalb des Spiels auch mit Browser-F11).
 
     if (App.screen === 'home') {
       const m = /^F(\d)$/.exec(e.key);
