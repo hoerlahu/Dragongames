@@ -72,7 +72,7 @@
       let darts = maxD;
       if (min < maxD) {
         const btns = [];
-        for (let d = min; d <= maxD; d++) btns.push({ label: d + (d === 1 ? ' Dart' : ' Darts'), key: String(d), value: d, cls: 'bigbtn' });
+        for (let d = min; d <= maxD; d++) btns.push({ label: d + (d === 1 ? ' Dart' : ' Darts'), key: String(d), alt: 'F' + (9 + d), value: d, cls: 'bigbtn' });
         darts = await DG.modal('Checkout ' + a.rest + '!', 'Mit wie vielen Darts in dieser Aufnahme?', btns);
         if (!darts) { ctx.ui.typed = ''; ctx.rerender(); return; }
       }
@@ -80,6 +80,14 @@
       return;
     }
     ctx.commit(st => applyVisit(st, score, Math.min(3, dartsLeft(st)), !!res.bust));
+  }
+
+  function checkOpts(s, ctx) {
+    return {
+      rest: s.att.rest, outMode: s.opts.outMode, maxDarts: Math.min(3, dartsLeft(s)),
+      onCheck: n => { if (!s.finished) ctx.commit(st => applyVisit(st, st.att.rest, n, false)); },
+      onRest: v => submitTotal(s, s.att.rest - v, ctx),
+    };
   }
 
   const visitSum = s => s.att.visit.reduce((x, d) => x + DG.dartValue(d), 0);
@@ -140,7 +148,7 @@
     if (s.inputMode === 'total') {
       inputBox = h('div', { class: 'inputbox' },
         h('div', { class: 'input-head' }, h('div', { class: 'typed' + (ui.typed ? '' : ' empty') }, ui.typed || s.players[s.cur].name + ': Punkte der Aufnahme + Enter')),
-        DG.totalPad(ui, sc => submitTotal(s, sc, ctx), () => ctx.rerender()));
+        DG.totalPad(ui, sc => submitTotal(s, sc, ctx), () => ctx.rerender(), checkOpts(s, ctx)));
     } else {
       const slots = [0, 1, 2].map(k => {
         const d = a.visit[k];
@@ -170,10 +178,7 @@
   function onKey(e, s, ctx) {
     const ui = ctx.ui;
     if (s.inputMode === 'single') return DG.dartKey(e, ui, d => throwDart(s, d, ctx), () => endVisit(s, ctx), () => ctx.rerender());
-    if (/^[0-9]$/.test(e.key)) { if (ui.typed.length < 3) { ui.typed = (ui.typed === '0' ? '' : ui.typed) + e.key; ctx.rerender(); } return true; }
-    if (e.key === 'Backspace') { ui.typed = ui.typed.slice(0, -1); ctx.rerender(); return true; }
-    if (e.key === 'Enter') { submitTotal(s, ui.typed === '' ? 0 : parseInt(ui.typed, 10), ctx); return true; }
-    return false;
+    return DG.totalKey(e, ui, sc => submitTotal(s, sc, ctx), () => ctx.rerender(), checkOpts(s, ctx));
   }
 
   function results(s) {

@@ -12,7 +12,8 @@
     optsByGame: {},
     state: null,
     history: [],
-    ui: { typed: '', dbuf: '', mult: 1 },
+    ui: { typed: '', dbuf: '', mult: 1, sel: null },
+    padHidden: false,
   };
 
   const LOGO = `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#e4173a"/><circle cx="20" cy="20" r="13" fill="#fff"/><circle cx="20" cy="20" r="8.5" fill="#e4173a"/><circle cx="20" cy="20" r="3.5" fill="#fff"/><path d="M20 20 L37 4" stroke="#1b2550" stroke-width="2.5" stroke-linecap="round"/><path d="M33 3 L39 1 L37 7" fill="#1b2550"/></svg>`;
@@ -22,8 +23,8 @@
       h('div', { class: 'logo', html: LOGO + '<span>Dragon<b>games</b></span>' }),
       h('div', { class: 'actions' },
         extra,
-        h('button', { class: 'pillbtn' + (DG.speech.on ? ' on' : ''), title: 'Score-Ansage', onclick: toggleSpeech }, '🔊 Ansage', h('span', { class: 'kbd' }, 'F7')),
-        h('button', { class: 'pillbtn', title: 'Vollbild', onclick: toggleFullscreen }, '⛶', h('span', { class: 'kbd' }, 'F8'))));
+        h('button', { class: 'pillbtn' + (DG.speech.on ? ' on' : ''), title: 'Score-Ansage', onclick: toggleSpeech }, '🔊 Ansage', App.screen === 'game' ? null : h('span', { class: 'kbd' }, 'F7')),
+        h('button', { class: 'pillbtn', title: 'Vollbild', onclick: toggleFullscreen }, '⛶', App.screen === 'game' ? null : h('span', { class: 'kbd' }, 'F8'))));
   }
   function toggleSpeech() { DG.speech.on = !DG.speech.on; DG.toast('Ansage ' + (DG.speech.on ? 'an' : 'aus')); render(); }
   function toggleFullscreen() {
@@ -109,7 +110,7 @@
     App.screen = 'game';
     render();
   }
-  function resetUi() { App.ui.typed = ''; App.ui.dbuf = ''; App.ui.mult = 1; }
+  function resetUi() { App.ui.typed = ''; App.ui.dbuf = ''; App.ui.mult = 1; App.ui.sel = null; }
 
   const ctx = DG.ctx = {
     get ui() { return App.ui; },
@@ -126,7 +127,7 @@
   };
 
   function undo() {
-    if (App.ui.typed || App.ui.dbuf || App.ui.mult !== 1) { resetUi(); render(); return; }
+    if (App.ui.typed || App.ui.dbuf || App.ui.mult !== 1 || App.ui.sel) { resetUi(); render(); return; }
     if (!App.history.length) { DG.toast('Nichts zum Rückgängigmachen'); return; }
     App.state = JSON.parse(App.history.pop());
     resetUi();
@@ -151,12 +152,21 @@
       : null;
     const body = h('div', { class: 'game' });
     g.render(s, body, ctx);
+    // Bildschirm-Tastatur ein-/ausklappen (für reine Tastatur-Bedienung)
+    body.querySelectorAll('.inputbox').forEach(box => {
+      if (App.padHidden) box.classList.add('collapsed');
+      box.querySelector('.input-head')?.appendChild(
+        h('button', { class: 'padtoggle', title: 'Bildschirm-Tastatur ein-/ausblenden', onclick: togglePad },
+          App.padHidden ? '▴ Tasten' : '▾ Tasten', h('span', { class: 'kbd' }, 'H')));
+    });
     return [topbar([
         h('button', { class: 'pillbtn', onclick: leaveGame }, '⇦ Menü', h('span', { class: 'kbd' }, 'Esc')),
         h('button', { class: 'pillbtn', onclick: undo }, '↶ Zurück', h('span', { class: 'kbd' }, 'X')),
         modeBtn]),
       body];
   }
+  function togglePad() { App.padHidden = !App.padHidden; render(); }
+
   function toggleInput() {
     const g = DG.games[App.gameId];
     const modes = g.inputModes || [];
@@ -208,8 +218,11 @@
   document.addEventListener('keydown', e => {
     if (DG.modalOpen()) return;
     const inInput = e.target.tagName === 'INPUT';
-    if (e.key === 'F8') { e.preventDefault(); toggleFullscreen(); return; }
-    if (e.key === 'F7') { e.preventDefault(); toggleSpeech(); return; }
+    // Im Spiel gehören F1–F12 den Schnelleingaben (wie Darthelfer); F7/F8 nur außerhalb
+    if (App.screen !== 'game') {
+      if (e.key === 'F8') { e.preventDefault(); toggleFullscreen(); return; }
+      if (e.key === 'F7') { e.preventDefault(); toggleSpeech(); return; }
+    }
 
     if (App.screen === 'home') {
       const m = /^F(\d)$/.exec(e.key);
@@ -231,12 +244,15 @@
     }
     if (App.screen === 'game') {
       if (inInput) return;
-      if (e.key === 'Escape') { e.preventDefault(); leaveGame(); return; }
+      const g0 = DG.games[App.gameId];
+      if (e.key === 'Escape') { e.preventDefault(); if (!(g0.onEscape && g0.onEscape(App.state, ctx))) leaveGame(); return; }
       const k = e.key.toLowerCase();
       if (k === 'x') { e.preventDefault(); undo(); return; }
       if (k === 'm') { e.preventDefault(); toggleInput(); return; }
+      if (k === 'h') { e.preventDefault(); togglePad(); return; }
       const g = DG.games[App.gameId];
       if (g.onKey && g.onKey(e, App.state, ctx)) e.preventDefault();
+      else if (/^F([1-9]|1[0-2])$/.test(e.key)) e.preventDefault(); // z.B. F5 darf das Spiel nicht neu laden
     }
   });
 

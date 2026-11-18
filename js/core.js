@@ -150,27 +150,63 @@ DG.say = function (text) {
 /* ---------- Eingabe-Pads ---------- */
 const h = DG.h;
 
-/** Ziffernblock für Aufnahme-Summe. ui.typed wird bearbeitet. */
-DG.totalPad = function (ui, onSubmit, rerender) {
+/** Ziffernblock für Aufnahme-Summe. ui.typed wird bearbeitet.
+ *  co (optional): {rest, outMode, maxDarts, onCheck(n), onRest(v)} → Darthelfer-Tasten F9–F12 */
+DG.totalPad = function (ui, onSubmit, rerender, co) {
   const press = k => {
     if (k === 'back') ui.typed = ui.typed.slice(0, -1);
-    else if (k === 'ok') { onSubmit(ui.typed === '' ? 0 : parseInt(ui.typed, 10)); return; }
+    else if (k === 'ok') { onSubmit(ui.typed === '' ? 0 : parseInt(ui.typed, 10), ui.typed === '' ? 'empty' : 'ok'); return; }
     else if (ui.typed.length < 3) ui.typed = (ui.typed === '0' ? '' : ui.typed) + k;
     rerender();
   };
-  const quick = [26, 41, 45, 60, 81, 85, 100, 140, 180];
+  const extra = [140, 180];
+  const coRow = co ? h('div', { class: 'pad wide', style: 'margin-bottom:6px' },
+    h('button', { class: 'key small dim', title: 'Restscore eintippen, dann F9', onclick: () => DG.restSubmit(ui, co) }, 'Rest', h('span', { class: 'kbd' }, 'F9')),
+    [1, 2, 3].map(n => h('button', {
+      class: 'key small green', disabled: !DG.canCheck(co, n),
+      onclick: () => co.onCheck(n),
+    }, 'Check ' + n + '. Dart', h('span', { class: 'kbd' }, 'F' + (9 + n))))) : null;
   return h('div', null,
-    h('div', { class: 'pad quick' }, quick.map(q => h('button', { class: 'key small dim', onclick: () => onSubmit(q) }, q))),
+    coRow,
+    h('div', { class: 'pad quick' },
+      DG.FKEYS.map((q, i) => h('button', { class: 'key small dim', onclick: () => onSubmit(q, 'fkey') }, q, h('span', { class: 'kbd' }, 'F' + (i + 1)))),
+      extra.map(q => h('button', { class: 'key small dim', onclick: () => onSubmit(q, 'fkey') }, q))),
     h('div', { class: 'pad total' },
       ['7', '8', '9'].map(k => h('button', { class: 'key', onclick: () => press(k) }, k)),
       h('button', { class: 'key dim', onclick: () => press('back') }, '⌫'),
       ['4', '5', '6'].map(k => h('button', { class: 'key', onclick: () => press(k) }, k)),
-      h('button', { class: 'key red', onclick: () => onSubmit(0) }, '0 / Bust'),
+      h('button', { class: 'key red', onclick: () => onSubmit(0, 'fkey') }, '0 / Bust'),
       ['1', '2', '3'].map(k => h('button', { class: 'key', onclick: () => press(k) }, k)),
       h('button', { class: 'key', onclick: () => press('0') }, '0'),
       h('button', { class: 'key green span3', onclick: () => press('ok') }, 'OK ', h('span', { class: 'kbd' }, 'Enter')),
       h('button', { class: 'key dim', onclick: () => { ui.typed = ''; rerender(); } }, 'C'),
     ));
+};
+/** Schnelleingabe-Tasten F1–F8 (Standardbelegung wie Darthelfer) */
+DG.FKEYS = [0, 26, 41, 45, 60, 81, 85, 100];
+
+/** Ist der Rest mit genau dem n-ten Dart checkbar? */
+DG.canCheck = (co, n) => n <= (co.maxDarts ?? 3) && !!DG.checkout(co.rest, co.outMode, n);
+DG.restSubmit = (ui, co) => {
+  if (ui.typed === '') { DG.toast('Erst den Restscore eintippen, dann F9'); return; }
+  co.onRest(parseInt(ui.typed, 10));
+};
+/** Tastatur für Aufnahme-Eingabe: Ziffern, Backspace, Enter, F9 (Rest), F10–F12 (Check mit 1./2./3. Dart) */
+DG.totalKey = function (e, ui, onSubmit, rerender, co) {
+  if (/^[0-9]$/.test(e.key)) { if (ui.typed.length < 3) { ui.typed = (ui.typed === '0' ? '' : ui.typed) + e.key; rerender(); } return true; }
+  if (e.key === 'Backspace') { ui.typed = ui.typed.slice(0, -1); rerender(); return true; }
+  if (e.key === 'Enter') { onSubmit(ui.typed === '' ? 0 : parseInt(ui.typed, 10), ui.typed === '' ? 'empty' : 'ok'); return true; }
+  const f = /^F([1-8])$/.exec(e.key);
+  if (f) { ui.typed = ''; onSubmit(DG.FKEYS[+f[1] - 1], 'fkey'); return true; }
+  if (co && (e.key === 'F9' || e.key === '/')) { DG.restSubmit(ui, co); return true; }
+  const m = /^F1([0-2])$/.exec(e.key);
+  if (co && m) {
+    const n = +m[1] + 1;
+    if (DG.canCheck(co, n)) co.onCheck(n);
+    else DG.toast(co.rest + ' ist mit dem ' + n + '. Dart nicht checkbar');
+    return true;
+  }
+  return false;
 };
 
 /** Feld-Pad für Einzeldarts. opts: {allowed:Set|null, onDart, onEnd, endLabel, noTriple} */
@@ -236,7 +272,7 @@ DG.modal = function (title, text, buttons) {
   return new Promise(resolve => {
     const close = v => { document.removeEventListener('keydown', onKey, true); bg.remove(); resolve(v); };
     const onKey = e => {
-      const b = buttons.find(b => b.key && b.key.toLowerCase() === e.key.toLowerCase());
+      const b = buttons.find(b => (b.key && b.key.toLowerCase() === e.key.toLowerCase()) || (b.alt && b.alt === e.key));
       if (b) { e.preventDefault(); e.stopPropagation(); close(b.value); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); }
       else { e.stopPropagation(); }

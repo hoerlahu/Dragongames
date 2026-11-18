@@ -166,7 +166,9 @@ input, select { font-family: inherit; }
 .sheet { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); overflow: auto; flex: 1; min-height: 120px; }
 .sheet table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .sheet th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-size: 12px; letter-spacing: 1px; padding: 8px 6px; text-transform: uppercase; }
-.sheet th.sc, .sheet td.sc { background: rgba(0, 0, 0, .25); }
+.sheet td.sc { background: rgba(0, 0, 0, .25); }
+.sheet th.sc { background: #141c3d; }
+.sheet th { z-index: 1; }
 .sheet td { text-align: center; padding: 5px 6px; font-size: 18px; font-weight: 600; height: 30px; }
 .sheet td.dc { color: var(--muted); font-size: 12px; background: rgba(0, 0, 0, .18); width: 40px; }
 .sheet td.bust { color: var(--accent); text-decoration: line-through; }
@@ -193,7 +195,8 @@ input, select { font-family: inherit; }
 .pad { display: grid; gap: 6px; }
 .pad.total { grid-template-columns: repeat(4, 1fr); }
 .pad.darts { grid-template-columns: repeat(7, 1fr); }
-.pad.quick { grid-template-columns: repeat(9, 1fr); margin-bottom: 6px; }
+.pad.quick { grid-template-columns: repeat(10, 1fr); margin-bottom: 6px; }
+.pad.quick .kbd { margin-left: 5px; font-size: 10px; padding: 1px 4px; }
 .pad.wide { grid-template-columns: repeat(4, 1fr); }
 .key {
   border: 1px solid var(--line); background: linear-gradient(var(--card-a), var(--card-b));
@@ -259,3 +262,12 @@ input, select { font-family: inherit; }
   .game-main.two, .game-main.multi { grid-template-columns: 1fr; overflow: auto; }
   body { overflow: auto; }
 }
+
+/* Bildschirm-Tastatur einklappbar */
+.padtoggle {
+  flex: none; height: 50px; padding: 0 14px; border-radius: 12px; font-size: 14px; font-weight: 700;
+  background: rgba(255, 255, 255, .08); border: 1px solid var(--line); white-space: nowrap;
+}
+.padtoggle:hover { background: rgba(255, 255, 255, .16); }
+.inputbox.collapsed > :not(.input-head) { display: none; }
+.inputbox.collapsed .input-head { margin-bottom: 0; }

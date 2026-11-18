@@ -87,7 +87,7 @@
       let darts = 3;
       if (min < 3) {
         const btns = [];
-        for (let d = min; d <= 3; d++) btns.push({ label: d + (d === 1 ? ' Dart' : ' Darts'), key: String(d), value: d, cls: 'bigbtn' });
+        for (let d = min; d <= 3; d++) btns.push({ label: d + (d === 1 ? ' Dart' : ' Darts'), key: String(d), alt: 'F' + (9 + d), value: d, cls: 'bigbtn' });
         darts = await DG.modal('Checkout ' + r + '!', 'Mit wie vielen Darts?', btns);
         if (!darts) { ctx.ui.typed = ''; ctx.rerender(); return; }
       }
@@ -98,6 +98,86 @@
       if (!st.opened[p] && score > 0) st.opened[p] = true;
       recordVisit(st, score, 3, !!res.bust);
     });
+  }
+
+  /** Darthelfer-Tasten: F10/F11/F12 = Check mit 1./2./3. Dart, F9 = Restscore */
+  function checkOpts(s, ctx) {
+    const p = s.cur;
+    return {
+      rest: s.rest[p], outMode: s.opts.outMode, maxDarts: s.opened[p] ? 3 : 0,
+      onCheck: n => { if (!s.finished) ctx.commit(st => { const r = st.rest[p]; recordVisit(st, r, n, false); }); },
+      onRest: v => submitTotal(s, s.rest[p] - v, ctx),
+    };
+  }
+
+  /* ---------- Korrektur früherer Aufnahmen (Pfeiltasten wie Darthelfer) ---------- */
+  /** alle Aufnahmen des laufenden Legs in Wurfreihenfolge */
+  function navList(s) {
+    const n = s.players.length, list = [];
+    const maxR = Math.max(0, ...s.visits.map(v => v.length));
+    for (let r = 0; r < maxR; r++) for (let k = 0; k < n; k++) {
+      const p = (s.legStarter + k) % n;
+      if (s.visits[p][r]) list.push({ p, r });
+    }
+    return list;
+  }
+  function moveSel(s, ui, dir) {
+    const list = navList(s);
+    if (!list.length) return;
+    let idx = ui.sel ? list.findIndex(x => x.p === ui.sel.p && x.r === ui.sel.r) : list.length;
+    idx = Math.max(0, Math.min(list.length, idx + dir));
+    ui.sel = idx === list.length ? null : list[idx];
+    ui.typed = '';
+  }
+  function moveRow(s, ui, dir) {
+    const cur = ui.sel || { p: s.cur, r: s.visits[s.cur].length };
+    const r = cur.r + dir;
+    if (r < 0) return;
+    if (r >= s.visits[cur.p].length) { ui.sel = null; ui.typed = ''; return; }
+    ui.sel = { p: cur.p, r };
+    ui.typed = '';
+  }
+  function contrib(v, k) {
+    const sc = v.b ? 0 : v.s;
+    return { pts: sc, f9: k < 3 ? sc : 0, c180: !v.b && v.s === 180 ? 1 : 0, c171: !v.b && v.s >= 171 && v.s < 180 ? 1 : 0,
+      c140: !v.b && v.s >= 140 && v.s < 171 ? 1 : 0, c100: !v.b && v.s >= 100 && v.s < 140 ? 1 : 0 };
+  }
+  /** Score einer früheren Aufnahme ändern und Reste/Statistik neu berechnen. Rückgabe: Fehlertext oder null */
+  function rewrite(st, p, r, score) {
+    const vs = st.visits[p];
+    const pst = st.players[p].st;
+    const sum = (list, sign) => list.forEach((v, k) => { const c = contrib(v, k);
+      pst.pts += sign * c.pts; pst.f9pts += sign * c.f9; pst.c180 += sign * c.c180; pst.c171 += sign * c.c171; pst.c140 += sign * c.c140; pst.c100 += sign * c.c100; });
+    sum(vs, -1);
+    vs[r].s = score; vs[r].d = null;
+    let rest = st.opts.start;
+    for (let k = 0; k < vs.length; k++) {
+      const res = DG.evalTotal(rest, vs[k].s, st.opts.outMode);
+      if (res.error) return res.error;
+      if (res.finish) return 'Die Korrektur würde das Leg beenden – Checkout bitte normal eintragen.';
+      vs[k].b = !!res.bust; rest = res.newRest; vs[k].r = rest;
+    }
+    sum(vs, 1);
+    st.rest[p] = rest;
+    return null;
+  }
+  function applyEdit(s, score, ctx) {
+    const { p, r } = ctx.ui.sel;
+    const test = JSON.parse(JSON.stringify(s));
+    const err = rewrite(test, p, r, score);
+    if (err) { DG.toast(err); ctx.ui.typed = ''; ctx.rerender(); return; }
+    const old = s.visits[p][r].s;
+    ctx.commit(st => rewrite(st, p, r, score));
+    DG.toast(s.players[p].name + ': ' + old + ' → ' + score + ' korrigiert', 'green');
+  }
+  /** Eingang aller Aufnahme-Eingaben: Korrektur oder neue Aufnahme */
+  function enterTotal(s, score, src, ctx) {
+    if (ctx.ui.sel) {
+      if (src === 'empty') { ctx.ui.sel = null; ctx.rerender(); return; }
+      applyEdit(s, score, ctx);
+      return;
+    }
+    submitTotal(s, score, ctx);
   }
 
   /* ---------- Eingabe: Einzeldarts ---------- */
@@ -192,9 +272,12 @@
       if (dcAfter === -1) cells.push(dc);
       s.players.forEach((pl, i) => {
         const v = s.visits[i][r];
+        const selHere = ui.sel && ui.sel.p === i && ui.sel.r === r;
         if (v) {
-          cells.push(h('td', { class: 'sc' + (v.b ? ' bust' : v.s >= 100 ? ' ton' : ''), title: v.d || '' }, v.s), h('td', null, v.r));
-        } else if (i === s.cur && r === s.visits[i].length) {
+          const pick = () => { if (s.inputMode !== 'total') { DG.toast('Korrektur bitte im Aufnahme-Modus (M)'); return; } ui.sel = { p: i, r }; ui.typed = ''; ctx.rerender(); };
+          cells.push(h('td', { class: 'sc' + (selHere ? ' cur' : v.b ? ' bust' : v.s >= 100 ? ' ton' : ''), title: (v.d || '') + ' (anklicken zum Ändern)', style: 'cursor:pointer', onclick: pick },
+            selHere && ui.typed ? ui.typed : v.s), h('td', null, v.r));
+        } else if (i === s.cur && r === s.visits[i].length && !ui.sel) {
           const shown = s.inputMode === 'total' ? ui.typed : (s.visit.length ? visitSum(s) : '');
           cells.push(h('td', { class: 'sc cur' }, shown), h('td', { style: 'color:var(--muted)' }, r === 0 ? s.opts.start : ''));
         } else if (r === 0 && s.visits[i].length === 0) {
@@ -212,8 +295,10 @@
     if (s.inputMode === 'total') {
       inputBox = h('div', { class: 'inputbox' },
         h('div', { class: 'input-head' },
-          h('div', { class: 'typed' + (ui.typed ? '' : ' empty') }, ui.typed || s.players[s.cur].name + ': Punkte eintippen + Enter')),
-        DG.totalPad(ui, sc => submitTotal(s, sc, ctx), rerender));
+          h('div', { class: 'typed' + (ui.typed ? '' : ' empty') }, ui.typed ? (ui.sel ? 'Korrektur → ' + ui.typed : ui.typed) : (ui.sel
+            ? 'Korrektur ' + s.players[ui.sel.p].name + ', Aufnahme ' + (ui.sel.r + 1) + ' (bisher ' + s.visits[ui.sel.p][ui.sel.r].s + '): neuer Wert + Enter · Esc = Abbruch'
+            : s.players[s.cur].name + ': Punkte eintippen + Enter · ←/↑ frühere Scores ändern'))),
+        DG.totalPad(ui, (sc, src) => enterTotal(s, sc, src, ctx), rerender, ui.sel ? null : checkOpts(s, ctx)));
     } else {
       const slots = [0, 1, 2].map(k => {
         const d = s.visit[k];
@@ -235,13 +320,21 @@
     }
   }
 
+  const ARROWS = { ArrowLeft: ['s', -1], ArrowRight: ['s', 1], Tab: ['s', 1], ArrowUp: ['r', -1], ArrowDown: ['r', 1] };
   function onKey(e, s, ctx) {
     const ui = ctx.ui;
+    const a = ARROWS[e.key];
+    if (a) {
+      if (s.inputMode !== 'total') { DG.toast('Korrektur bitte im Aufnahme-Modus (M)'); return true; }
+      if (a[0] === 's') moveSel(s, ui, e.shiftKey && e.key === 'Tab' ? -1 : a[1]); else moveRow(s, ui, a[1]);
+      ctx.rerender(); return true;
+    }
     if (s.inputMode === 'single') return DG.dartKey(e, ui, d => throwDart(s, d, ctx), () => endVisit(s, ctx), () => ctx.rerender());
-    if (/^[0-9]$/.test(e.key)) { if (ui.typed.length < 3) { ui.typed = (ui.typed === '0' ? '' : ui.typed) + e.key; ctx.rerender(); } return true; }
-    if (e.key === 'Backspace') { ui.typed = ui.typed.slice(0, -1); ctx.rerender(); return true; }
-    if (e.key === 'Enter') { submitTotal(s, ui.typed === '' ? 0 : parseInt(ui.typed, 10), ctx); return true; }
-    return false;
+    return DG.totalKey(e, ui, (sc, src) => enterTotal(s, sc, src, ctx), () => ctx.rerender(), ui.sel ? null : checkOpts(s, ctx));
+  }
+  function onEscape(s, ctx) {
+    if (!ctx.ui.sel) return false;
+    ctx.ui.sel = null; ctx.ui.typed = ''; ctx.rerender(); return true;
   }
 
   function results(s) {
@@ -265,6 +358,6 @@
       { key: 'legs', label: 'Anzahl Legs', type: 'number', min: 1, max: 21, def: 3 },
       { key: 'sets', label: 'Sets (1 = ohne Sets)', type: 'number', min: 1, max: 9, def: 1 },
     ],
-    create, render, onKey, results,
+    create, render, onKey, onEscape, results,
   });
 })();
