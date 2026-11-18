@@ -16,7 +16,7 @@
     padHidden: false,
   };
 
-  const LOGO = `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#e4173a"/><circle cx="20" cy="20" r="13" fill="#fff"/><circle cx="20" cy="20" r="8.5" fill="#e4173a"/><circle cx="20" cy="20" r="3.5" fill="#fff"/><path d="M20 20 L37 4" stroke="#1b2550" stroke-width="2.5" stroke-linecap="round"/><path d="M33 3 L39 1 L37 7" fill="#1b2550"/></svg>`;
+  const LOGO = '<img src="img/dartdragons.png" alt="Dartdragons Moosbach">';
 
   function topbar(extra) {
     return h('div', { class: 'topbar' },
@@ -43,6 +43,7 @@
     });
     return [topbar(),
       h('div', { class: 'home' },
+        h('div', { class: 'home-logo' }, h('img', { src: 'img/dartdragons.png', alt: 'Dartdragons Moosbach' }), h('div', { class: 'claim' }, 'Vereinstraining')),
         h('div', { class: 'tiles' }, tiles),
         h('div', { class: 'footer' }, 'Vereinstraining · alles läuft lokal im Browser · Tastatur: F1–F' + DG.gameOrder.length + ' Spiel wählen'))];
   }
@@ -150,7 +151,7 @@
     const modeBtn = modes.length > 1
       ? h('button', { class: 'pillbtn', onclick: toggleInput }, 'Eingabe: ' + (g.inputModeLabels?.[s.inputMode] || s.inputMode), h('span', { class: 'kbd' }, 'M'))
       : null;
-    const body = h('div', { class: 'game' });
+    const body = h('div', { class: 'game' + (App.padHidden ? ' nopad' : '') });
     g.render(s, body, ctx);
     // Bildschirm-Tastatur ein-/ausklappen (für reine Tastatur-Bedienung)
     body.querySelectorAll('.inputbox').forEach(box => {
@@ -209,7 +210,14 @@
     // Wurfprotokoll immer ans Ende scrollen
     root.querySelectorAll('.sheet').forEach(e => {
       const cur = e.querySelector('.cur');
-      e.scrollTop = cur ? Math.max(0, cur.offsetTop - e.clientHeight / 2) : e.scrollHeight;
+      if (!cur) { e.scrollTop = e.scrollHeight; return; }
+      const head = e.querySelector('thead')?.offsetHeight || 0;
+      const avail = e.clientHeight - head;
+      const top = cur.getBoundingClientRect().top - e.getBoundingClientRect().top + e.scrollTop; // Position im Scrollbereich
+      // aktuelle Zeile möglichst unten, damit die vorherigen Aufnahmen sichtbar bleiben
+      const want = top - head - (avail - cur.offsetHeight);
+      if (top - head < e.scrollTop || top + cur.offsetHeight > e.scrollTop + e.clientHeight) e.scrollTop = Math.max(0, want);
+      else e.scrollTop = Math.max(0, Math.min(e.scrollTop, want > 0 ? want : 0));
     });
   }
   DG.render = render;

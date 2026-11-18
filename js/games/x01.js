@@ -253,7 +253,10 @@
     const canChangeStarter = n > 1 && s.visits.every(v => v.length === 0) && s.visit.length === 0;
     const changeStarter = d => ctx.commit(st => { st.legStarter = (st.legStarter + d + n) % n; st.cur = st.legStarter; });
     const info = h('div', { class: 'info-row' },
-      canChangeStarter ? h('button', { class: 'info-pill', onclick: () => changeStarter(1) }, '‹ Anwurf ändern ›') : h('div', { class: 'info-pill' }, 'Leg ' + s.legNo + (s.opts.sets > 1 ? ' · Set ' + s.setNo : '')),
+      canChangeStarter ? h('div', { class: 'info-pill', style: 'display:flex;justify-content:space-between;align-items:center;padding:4px 6px' },
+        h('button', { class: 'pill', onclick: () => changeStarter(-1), title: 'Anwurf zum vorherigen Spieler (←)' }, '‹', h('span', { class: 'kbd' }, '←')),
+        'Anwurf ändern',
+        h('button', { class: 'pill', onclick: () => changeStarter(1), title: 'Anwurf zum nächsten Spieler (→)' }, h('span', { class: 'kbd', style: 'margin:0 6px 0 0' }, '→'), '›')) : h('div', { class: 'info-pill' }, 'Leg ' + s.legNo + (s.opts.sets > 1 ? ' · Set ' + s.setNo : '')),
       h('div', { class: 'info-pill' }, s.opts.start + ' · ' + legsTxt + ' · ' + (s.opts.inMode === 'double' ? 'double in · ' : '') + OUT_LABEL[out]));
 
     // Wurfprotokoll
@@ -297,7 +300,7 @@
         h('div', { class: 'input-head' },
           h('div', { class: 'typed' + (ui.typed ? '' : ' empty') }, ui.typed ? (ui.sel ? 'Korrektur → ' + ui.typed : ui.typed) : (ui.sel
             ? 'Korrektur ' + s.players[ui.sel.p].name + ', Aufnahme ' + (ui.sel.r + 1) + ' (bisher ' + s.visits[ui.sel.p][ui.sel.r].s + '): neuer Wert + Enter · Esc = Abbruch'
-            : s.players[s.cur].name + ': Punkte eintippen + Enter · ←/↑ frühere Scores ändern'))),
+            : s.players[s.cur].name + ': Punkte eintippen + Enter · ' + (canChangeStarter ? '←/→ Anwurf ändern' : '←/↑ frühere Scores ändern')))),
         DG.totalPad(ui, (sc, src) => enterTotal(s, sc, src, ctx), rerender, ui.sel ? null : checkOpts(s, ctx)));
     } else {
       const slots = [0, 1, 2].map(k => {
@@ -320,10 +323,20 @@
     }
   }
 
+  const canChangeStarter = s => s.visits.every(v => v.length === 0) && s.visit.length === 0 && !s.finished;
   const ARROWS = { ArrowLeft: ['s', -1], ArrowRight: ['s', 1], Tab: ['s', 1], ArrowUp: ['r', -1], ArrowDown: ['r', 1] };
   function onKey(e, s, ctx) {
     const ui = ctx.ui;
     const a = ARROWS[e.key];
+    if (a && canChangeStarter(s)) {
+      // vor dem ersten Wurf im Leg: Pfeiltasten wechseln den Anwurf (wie Darthelfer)
+      if (s.players.length > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        const d = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+        const n = s.players.length;
+        ctx.commit(st => { st.legStarter = (st.legStarter + d + n) % n; st.cur = st.legStarter; });
+      }
+      return true;
+    }
     if (a) {
       if (s.inputMode !== 'total') { DG.toast('Korrektur bitte im Aufnahme-Modus (M)'); return true; }
       if (a[0] === 's') moveSel(s, ui, e.shiftKey && e.key === 'Tab' ? -1 : a[1]); else moveRow(s, ui, a[1]);
