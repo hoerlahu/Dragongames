@@ -277,12 +277,20 @@
         const v = s.visits[i][r];
         const selHere = ui.sel && ui.sel.p === i && ui.sel.r === r;
         if (v) {
+          // Mausklick auf eine frühere Aufnahme setzt den Eingabe-Cursor dorthin
           const pick = () => { if (s.inputMode !== 'total') { DG.toast('Korrektur bitte im Aufnahme-Modus (M)'); return; } ui.sel = { p: i, r }; ui.typed = ''; ctx.rerender(); };
-          cells.push(h('td', { class: 'sc' + (selHere ? ' cur' : v.b ? ' bust' : v.s >= 100 ? ' ton' : ''), title: (v.d || '') + ' (anklicken zum Ändern)', style: 'cursor:pointer', onclick: pick },
-            selHere && ui.typed ? ui.typed : v.s), h('td', null, v.r));
-        } else if (i === s.cur && r === s.visits[i].length && !ui.sel) {
-          const shown = s.inputMode === 'total' ? ui.typed : (s.visit.length ? visitSum(s) : '');
-          cells.push(h('td', { class: 'sc cur' }, shown), h('td', { style: 'color:var(--muted)' }, r === 0 ? s.opts.start : ''));
+          cells.push(h('td', { class: 'sc click' + (selHere ? ' cur' + (s.inputMode === 'total' ? ' caret' : '') : v.b ? ' bust' : ''), title: (v.d ? v.d + ' – ' : '') + 'anklicken zum Ändern', onclick: pick },
+            selHere ? (ui.typed || v.s) : (!v.b && v.s >= 100 ? h('span', { class: 'bubble' }, v.s) : v.s)),
+            h('td', { class: 'click', title: 'anklicken zum Ändern', onclick: pick }, v.r));
+        } else if (i === s.cur && r === s.visits[i].length) {
+          if (!ui.sel) {
+            const shown = s.inputMode === 'total' ? ui.typed : (s.visit.length ? visitSum(s) : '');
+            cells.push(h('td', { class: 'sc cur' + (s.inputMode === 'total' ? ' caret' : '') }, shown), h('td', { style: 'color:var(--muted)' }, r === 0 ? s.opts.start : ''));
+          } else {
+            // Klick zurück auf das aktuelle Feld beendet die Korrektur
+            const back = () => { ui.sel = null; ui.typed = ''; ctx.rerender(); };
+            cells.push(h('td', { class: 'sc click', title: 'zurück zur aktuellen Aufnahme', onclick: back }, ''), h('td', { class: 'click', onclick: back }, r === 0 ? s.opts.start : ''));
+          }
         } else if (r === 0 && s.visits[i].length === 0) {
           cells.push(h('td', { class: 'sc' }, ''), h('td', null, s.opts.start));
         } else cells.push(h('td', { class: 'sc' }, ''), h('td', null, ''));
@@ -298,9 +306,10 @@
     if (s.inputMode === 'total') {
       inputBox = h('div', { class: 'inputbox' },
         h('div', { class: 'input-head' },
-          h('div', { class: 'typed' + (ui.typed ? '' : ' empty') }, ui.typed ? (ui.sel ? 'Korrektur → ' + ui.typed : ui.typed) : (ui.sel
-            ? 'Korrektur ' + s.players[ui.sel.p].name + ', Aufnahme ' + (ui.sel.r + 1) + ' (bisher ' + s.visits[ui.sel.p][ui.sel.r].s + '): neuer Wert + Enter · Esc = Abbruch'
-            : s.players[s.cur].name + ': Punkte eintippen + Enter · ' + (canChangeStarter ? '←/→ Anwurf ändern' : '←/↑ frühere Scores ändern')))),
+          // Die getippte Zahl steht oben im gelben Protokollfeld – hier nur ein Hinweis
+          h('div', { class: 'hintbar' + (ui.sel ? ' edit' : '') }, ui.sel
+            ? 'Korrektur ' + s.players[ui.sel.p].name + ', Aufnahme ' + (ui.sel.r + 1) + ' (bisher ' + s.visits[ui.sel.p][ui.sel.r].s + ') · neuer Wert + Enter · Esc = Abbruch'
+            : s.players[s.cur].name + ' ist dran · Zahl tippen + Enter · ' + (canChangeStarter ? '←/→ Anwurf ändern' : '←/↑ oder Klick: frühere Scores ändern'))),
         DG.totalPad(ui, (sc, src) => enterTotal(s, sc, src, ctx), rerender, ui.sel ? null : checkOpts(s, ctx)));
     } else {
       const slots = [0, 1, 2].map(k => {

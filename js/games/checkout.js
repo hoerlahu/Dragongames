@@ -132,10 +132,10 @@
     for (let r = 0; r < s.opts.tries; r++) {
       rows.push(h('tr', null, h('td', { class: 'dc' }, r + 1), s.players.map((p, i) => {
         const e = p.log[r];
-        if (e) return h('td', { class: 'sc' + (e.ok ? ' ton' : ' bust'), style: 'text-decoration:none' }, e.t + (e.ok ? ' ✓ ' + e.d + 'D' : ' ✗'));
+        if (e) return h('td', { class: 'sc' + (e.ok ? ' okc' : ' bust'), style: 'text-decoration:none' }, e.t + (e.ok ? ' ✓ ' + e.d + 'D' : ' ✗'));
         if (i === s.cur && r === p.tries) {
           const vs = a.visits.map(v => v.b ? 'Bust' : v.s).join(' · ');
-          return h('td', { class: 'sc cur' }, a.target + (vs ? ' → ' + vs : '') + (s.inputMode === 'total' && ui.typed ? ' · ' + ui.typed : ''));
+          return h('td', { class: 'sc cur' + (s.inputMode === 'total' ? ' caret' : '') }, a.target + (vs ? ' → ' + vs : '') + (s.inputMode === 'total' ? ' · ' + ui.typed : ''));
         }
         return h('td', { class: 'sc' }, '');
       })));
@@ -147,7 +147,7 @@
     let inputBox;
     if (s.inputMode === 'total') {
       inputBox = h('div', { class: 'inputbox' },
-        h('div', { class: 'input-head' }, h('div', { class: 'typed' + (ui.typed ? '' : ' empty') }, ui.typed || s.players[s.cur].name + ': Punkte der Aufnahme + Enter')),
+        h('div', { class: 'input-head' }, h('div', { class: 'hintbar' }, s.players[s.cur].name + ' ist dran · Punkte der Aufnahme tippen + Enter')),
         DG.totalPad(ui, sc => submitTotal(s, sc, ctx), () => ctx.rerender(), checkOpts(s, ctx)));
     } else {
       const slots = [0, 1, 2].map(k => {
